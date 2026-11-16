@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://photon.komoot.io; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mileage / Local Timeline analysis</title>
+  <link rel="stylesheet" href="./vendor/leaflet.css">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./vendor/leaflet.js"></script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand"><span class="brand-mark">km</span> MILEAGE <span class="divider">/</span> TIMELINE ANALYZER</div>
+      <span class="privacy"><span class="dot"></span> Local analysis. Online location services are optional.</span>
+    </header>
+
+    <section class="intro">
+      <p class="eyebrow">YOUR JOURNEYS, ACCOUNTED FOR</p>
+      <h1>Every day. Every kilometer.</h1>
+      <p class="subtitle">Turn your Google Timeline into a clear record of work and private driving.</p>
+    </section>
+
+    <section class="setup-grid" aria-label="Import and classification settings">
+      <div class="panel upload-panel" id="drop-zone">
+        <div class="section-heading"><span class="step">01</span><h2>Bring your timeline</h2></div>
+        <p>Choose a Timeline export or saved mileage project JSON.<br>Multiple monthly exports work, too.</p>
+        <label class="upload-button" for="file-input">Choose JSON files <span aria-hidden="true">&uarr;</span></label>
+        <input id="file-input" class="visually-hidden" type="file" accept=".json,application/json" multiple>
+        <p class="hint">or drop files anywhere in this panel</p>
+        <p id="file-status" class="file-status" role="status">No file selected. Nothing is sent to a server.</p>
+      </div>
+
+      <form class="panel schedule-panel" id="schedule-form">
+        <div class="section-heading"><span class="step">02</span><h2>Set your work schedule</h2></div>
+        <p>Trips departing during these hours are marked as work. You can override any trip below.</p>
+        <fieldset class="weekdays">
+          <legend class="field-label">WORKDAYS</legend>
+          <label><input type="checkbox" name="day" value="1" checked><span>Mon</span></label>
+          <label><input type="checkbox" name="day" value="2" checked><span>Tue</span></label>
+          <label><input type="checkbox" name="day" value="3" checked><span>Wed</span></label>
+          <label><input type="checkbox" name="day" value="4" checked><span>Thu</span></label>
+          <label><input type="checkbox" name="day" value="5" checked><span>Fri</span></label>
+          <label><input type="checkbox" name="day" value="6"><span>Sat</span></label>
+          <label><input type="checkbox" name="day" value="0"><span>Sun</span></label>
+        </fieldset>
+        <div class="hours">
+          <label><span class="field-label">FROM</span><input id="work-start" type="time" value="08:00" required></label>
+          <span class="time-dash">&mdash;</span>
+          <label><span class="field-label">UNTIL</span><input id="work-end" type="time" value="18:00" required></label>
+          <button type="submit" class="button secondary">Apply schedule</button>
+        </div>
+        <p class="hint">The schedule assigns Work or Private. Select Commute manually for home-to-work trips; commute kilometers have their own total.</p>
+      </form>
+    </section>
+
+    <div id="error" class="notice error" role="alert" hidden></div>
+    <div id="import-notice" class="notice" role="status" hidden></div>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <p class="method-note">A schedule is a starting point, not proof of business travel. Timeline can include passenger rides and inaccurate distances. Review before using for expenses or tax.</p>
+
+    <section class="results" aria-labelledby="results-title">
+      <div class="results-heading">
+        <div><p class="eyebrow">THE BIG PICTURE</p><h2 id="results-title">Your mileage overview</h2></div>
+        <button id="clear" class="text-button" type="button" disabled>Clear imported data</button>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>TOTAL DRIVEN</span><strong id="total-km">0.00 <small>km</small></strong><p id="trip-count">0 car trips</p></div>
+        <div class="stat work"><span><i></i> WORK</span><strong id="work-km">0.00 <small>km</small></strong><p>Work-classified trips, excluding Commute</p></div>
+        <div class="stat commute"><span><i></i> COMMUTE</span><strong id="commute-km">0.00 <small>km</small></strong><p>Manually classified home-to-work trips</p></div>
+        <div class="stat private"><span><i></i> PRIVATE</span><strong id="private-km">0.00 <small>km</small></strong><p>Outside work or manually classified</p></div>
+      </div>
+
+      <div class="panel table-panel">
+        <div class="table-toolbar">
+          <div class="tabs" role="group" aria-label="Table view">
+            <button type="button" class="tab active" id="daily-tab" aria-pressed="true">Daily summary</button>
+            <button type="button" class="tab" id="trips-tab" aria-pressed="false">Individual trips</button>
+          </div>
+          <div class="table-actions">
+            <label class="date-filter">From<input type="date" id="date-from"></label>
+            <label class="date-filter">To<input type="date" id="date-to"></label>
+            <button type="button" class="text-button" id="reset-dates">All dates</button>
+            <button type="button" class="button" id="export" disabled>Export CSV <span aria-hidden="true">&darr;</span></button>
+            <button type="button" class="button secondary" id="save-json" disabled>Save JSON</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table id="daily-table">
+            <caption class="visually-hidden">Daily work, commute and private car kilometers</caption>
+            <thead><tr><th scope="col">Date</th><th scope="col" class="numeric">Car trips</th><th scope="col" class="numeric">Work km</th><th scope="col" class="numeric">Commute km</th><th scope="col" class="numeric">Private km</th><th scope="col" class="numeric">Total km</th><th scope="col">Review</th></tr></thead>
+            <tbody id="daily-body"></tbody>
+            <tfoot id="daily-foot"></tfoot>
+          </table>
+          <table id="trips-table" hidden>
+            <caption class="visually-hidden">Individual car trips with classification overrides</caption>
+            <thead><tr><th scope="col">Date</th><th scope="col">Departure / arrival</th><th scope="col">Addresses / coordinates</th><th scope="col" class="numeric">Distance km</th><th scope="col">Category</th><th scope="col">Trip details</th></tr></thead>
+            <tbody id="trips-body"></tbody>
+          </table>
+          <div id="empty" class="empty-state"><span class="empty-icon" aria-hidden="true">&harr;</span><h3>Your next journey starts here</h3><p>Import a Timeline export to see your daily mileage.</p></div>
+        </div>
+        <section id="trip-detail" class="panel trip-detail" aria-labelledby="selected-title" hidden>
+          <div class="section-heading"><span class="step">03</span><h2 id="selected-title">Selected trip</h2></div>
+          <p id="map-description"></p>
+          <label class="online-option"><input id="online-services" type="checkbox"> Enable online OSM map tiles and on-demand address lookup</label>
+          <p class="hint">Enabling this sends the viewed map area and your IP to OpenStreetMap. Clicking address lookup sends only the selected endpoints to Photon (Komoot), not the full export. Leave off for a local geometry-only view, or enter addresses manually.</p>
+          <div id="trip-map" role="region" aria-label="Selected trip map" hidden></div>
+          <p id="map-error" class="notice error" role="alert" hidden></p>
+          <div class="address-fields">
+            <label>From address / place<input id="from-address" type="text" placeholder="Look up or enter address"><small id="from-coordinates"></small></label>
+            <label>To address / place<input id="to-address" type="text" placeholder="Look up or enter address"><small id="to-coordinates"></small></label>
+          </div>
+          <button id="lookup-addresses" type="button" class="button secondary" disabled>Look up endpoint addresses</button>
+          <p id="address-status" role="status" hidden></p>
+          <p class="hint">Existing labels are kept; clear a label to look it up again. Labels are reused at matching coordinates. No bulk lookup. Address data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a> via <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a>. <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">Report a map issue</a>. <a href="./vendor/leaflet.LICENSE" target="_blank" rel="noopener">Leaflet license</a>.</p>
+        </section>
+        <div class="table-footer"><span id="row-count">No journeys loaded</span><span>Distances shown to 2 decimals &middot; CSV to 3</span></div>
+      </div>
+      <p class="hint">Dates and times follow the export's timezone offsets (UTC if absent). Overnight trips belong to the departure date. CSV always exports individual trips, regardless of the selected table view. Filters apply to totals and CSV. Only days with car trips are listed.</p>
+      <p class="hint">Save JSON keeps all trips, original source data, schedule, classifications and addresses regardless of date filters. Reopen it with Choose JSON files. Unsaved changes stay in this tab only.</p>
+    </section>
+    <footer><span>MILEAGE <span class="divider">/</span> Made for a clearer record.</span><span>No accounts. Optional OSM / Photon services.</span></footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "local-mileage-tool",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-only Google Timeline mileage analysis",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node scripts/build.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4"
+  }
+}
